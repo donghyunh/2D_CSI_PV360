@@ -1,0 +1,129 @@
+
+% === Define Parameters ===
+selected_voxels = [5,5; 6,5; 3,5]; % (Row, Column) positions
+num_voxels = size(selected_voxels, 1);
+num_frames = size(rc1, 4);
+peak_ppm = [160.23, 170.68, 183.16]; % Peaks used for ratios
+peak_name = [Bicarb, Pyr, Lac];
+
+% Define ppm axis
+ppm_axis = linspace(cppm - ppm/2, cppm + ppm/2, size(rc1, 1));
+
+% Find nearest indices for each peak
+[~, peak_idx] = min(abs(ppm_axis' - peak_ppm), [], 1);
+
+% Preallocate storage for AUC values
+auc_curves = zeros(num_voxels, num_frames, length(peak_ppm));
+
+% Loop over selected voxels
+for v = 1:num_voxels
+    x = selected_voxels(v, 1);
+    y = selected_voxels(v, 2);
+    
+    if x > size(rc1, 2) || y > size(rc1, 3)
+        fprintf('Skipping voxel (%d, %d) - Out of bounds\n', x, y);
+        continue;
+    end
+
+    for p = 1:length(peak_ppm)
+        ppm_range = (ppm_axis >= peak_ppm(p) - 1) & (ppm_axis <= peak_ppm(p) + 1);
+        
+        if sum(ppm_range) < 2
+            fprintf('Skipping peak at %.2f ppm - No valid range\n', peak_ppm(p));
+            continue;
+        end
+
+        for t = 1:num_frames
+            spectrum = abs(squeeze(rc1(:, x, y, t)));
+            auc_curves(v, t, p) = trapz(ppm_axis(ppm_range), spectrum(ppm_range));
+        end
+    end
+end
+
+% === Plot AUC Dynamic Curves with Smooth Exponential Fitting ===
+figure;
+time_points = (1:num_frames)'; % Column vector
+smooth_time = linspace(1, num_frames, 100)'; % More points for smoother curve
+colors = lines(num_voxels); % Generate different colors for each voxel
+
+for p = 1:length(peak_ppm)
+    subplot(length(peak_ppm), 1, p);
+    hold on;
+
+    for v = 1:num_voxels
+        x = selected_voxels(v, 1);
+        y = selected_voxels(v, 2);
+        auc_values = squeeze(auc_curves(v, :, p))'; % Extract AUC values as column vector
+
+        % Exponential Smoothing Spline Fit
+        fit_curve = fit(time_points, auc_values, 'smoothingspline');
+
+        % Generate smooth fitted values
+        smooth_fit = feval(fit_curve, smooth_time);
+
+        % Assign color for this voxel
+        voxel_color = colors(v, :);
+
+        % Plot Original Data Points
+        scatter(time_points, auc_values, 60, 'filled', 'MarkerFaceColor', voxel_color, ...
+                'MarkerEdgeColor', 'k', 'DisplayName', sprintf('Voxel (%d,%d)', x, y));
+
+        % Plot Smooth Exponential Fit
+        plot(smooth_time, smooth_fit, '-', 'LineWidth', 2, 'Color', voxel_color, ...
+             'DisplayName', sprintf('Fit Voxel (%d,%d)', x, y));
+    end
+
+    hold off;
+    xlabel('Time Frame', 'FontSize', 12, 'FontWeight', 'bold');
+    ylabel('AUC Intensity', 'FontSize', 12, 'FontWeight', 'bold');
+    title(sprintf('Exponential Fit for Peak at %.2f ppm', peak_ppm(p)), 'FontSize', 14, 'FontWeight', 'bold');
+    %legend show;
+    grid on;
+end
+
+% === Compute and Plot Dynamic Ratios ===
+figure;
+ratio_labels = {'Bicab/Pyr', 'Lac/Pyr'};
+
+for r = 1:2
+    subplot(2, 1, r);
+    hold on;
+
+    for v = 1:num_voxels
+        x = selected_voxels(v, 1);
+        y = selected_voxels(v, 2);
+        
+        % Compute dynamic ratio
+        if r == 1
+            ratio_values = auc_curves(v, :, 1) ./ auc_curves(v, :, 2);
+        else
+            ratio_values = auc_curves(v, :, 3) ./ auc_curves(v, :, 2);
+        end
+        
+        ratio_values = squeeze(ratio_values)'; % Convert to row vector
+
+        % Exponential Smoothing Spline Fit for Ratios
+        fit_curve = fit(time_points, ratio_values, 'poly2');
+
+        % Generate smooth fitted values
+        smooth_fit = feval(fit_curve, smooth_time);
+
+        % Assign color for this voxel
+        voxel_color = colors(v, :);
+
+        % Plot Original Data Points
+        scatter(time_points, ratio_values, 60, 'filled', 'MarkerFaceColor', voxel_color, ...
+                'MarkerEdgeColor', 'k', 'DisplayName', sprintf('Voxel (%d,%d)', x, y));
+
+        % Plot Smooth Exponential Fit
+        plot(smooth_time, smooth_fit, '-', 'LineWidth', 2, 'Color', voxel_color, ...
+             'DisplayName', sprintf('Fit Voxel (%d,%d)', x, y));
+    end
+
+    hold off;
+    xlabel('Time Frame', 'FontSize', 12, 'FontWeight', 'bold');
+    ylabel('Dynamic Ratio', 'FontSize', 12, 'FontWeight', 'bold');
+    title(sprintf('Dynamic Ratio: %s', ratio_labels{r}), 'FontSize', 14, 'FontWeight', 'bold');
+    %legend show;
+    grid on;
+end

@@ -1,0 +1,155 @@
+close all
+
+
+% Extract and normalize igray (proton anatomical image)
+igray = double(igray); % Convert to double for processing
+igray = (igray - min(igray(:))) / (max(igray(:)) - min(igray(:))); % Normalize
+
+% Extract and normalize CSI image (using absolute value of rc123)
+csi_img = abs(squeeze(rc123(:,:,round(size(rc123,3)/2),1))); % Pick a representative slice
+csi_img = csi_img / max(csi_img(:)); % Normalize CSI image
+
+% Resize CSI to match igray dimensions
+csi_resized = imresize(csi_img, [size(igray,1), size(igray,2)]);
+
+% Apply colormap to CSI image
+csi_colormap = jet(256); % Use jet colormap for visualization
+csi_mapped = ind2rgb(gray2ind(csi_resized, 256), csi_colormap);
+
+% Blend CSI with igray using transparency
+alpha = 0.5; % Adjust blending factor (0: only igray, 1: only CSI)
+overlay_img = (1-alpha) * repmat(igray, [1, 1, 3]) + alpha * csi_mapped;
+
+% Display the overlay image
+figure;
+imshow(overlay_img);
+title('CSI Overlay on Proton Image (igray)');
+
+
+% Define parameters
+ppm_axis = linspace(cppm - ppm/2, cppm + ppm/2, size(rc123,1)); % Frequency axis in ppm
+peak_ppm = [148, 166, 184, 197]; % Peaks of interest
+num_frames = 15; % Number of time frames
+
+% Find nearest indices for each peak
+[~, peak_idx] = min(abs(ppm_axis' - peak_ppm), [], 1);
+
+% Create figure for animation
+figure;
+colormap jet;
+
+for t = 1:num_frames
+    % Extract 8x8 spatial data at each peak
+    for p = 1:length(peak_ppm)
+        subplot(4, 4, p); % Arrange plots in 2x2 grid
+        heatmap_data = abs(squeeze(rc123(peak_idx(p), :, :, t))); % Extract spatial intensity
+        imagesc(heatmap_data, [0 50]); % Display heatmap
+        colorbar;
+        title(sprintf('Peak at %d ppm (Frame %d)', peak_ppm(p), t));
+        axis square;
+    end
+    
+    % Pause to create animation effect
+    pause(0.5); % Adjust for desired speed
+end
+
+
+v = VideoWriter('CSI_dynamic_heatmap.avi'); open(v);
+for t = 1:num_frames
+    for p = 1:length(peak_ppm)
+        subplot(2, 2, p);
+        imagesc(abs(squeeze(rc123(peak_idx(p), :, :, t))));
+        title(sprintf('Peak at %d ppm (Frame %d)', peak_ppm(p), t));
+        colorbar;
+    end
+    frame = getframe(gcf);
+    writeVideo(v, frame);
+end
+close(v);
+
+% Define parameters
+ppm_axis = linspace(cppm - ppm/2, cppm + ppm/2, size(rc123,1)); % Frequency axis in ppm
+peak_ppm = [148, 166, 184, 197]; % Peaks of interest
+num_frames = 15; % Number of time frames
+
+% Find nearest indices for each peak
+[~, peak_idx] = min(abs(ppm_axis' - peak_ppm), [], 1);
+
+% Normalize igray (proton anatomical image)
+igray = double(igray);
+igray = (igray - min(igray(:))) / (max(igray(:)) - min(igray(:))); % Normalize
+
+% Create figure for displaying all heatmaps
+figure;
+colormap jet;
+
+for t = 1:num_frames
+    for p = 1:length(peak_ppm)
+        % Extract 8x8 spatial data at each peak
+        heatmap_data = abs(squeeze(rc123(peak_idx(p), :, :, t))); % Extract CSI intensity
+        
+        % Resize CSI data to match igray dimensions
+        csi_resized = imresize(heatmap_data, [size(igray,1), size(igray,2)], 'bicubic');
+        
+        % Apply colormap to CSI image
+        csi_mapped = ind2rgb(gray2ind(csi_resized, 256), jet(256));
+        
+        % Overlay CSI onto igray image with transparency
+        alpha = 0.5; % Adjust blending factor (0: only igray, 1: only CSI)
+        overlay_img = (1-alpha) * repmat(igray, [1, 1, 3]) + alpha * csi_mapped;
+        
+        % Plot in a 4x20 grid
+        subplot(4, num_frames, (p-1)*num_frames + t); 
+        imshow(overlay_img);
+        title(sprintf('%d ppm\nFrame %d', peak_ppm(p), t), 'FontSize', 8);
+    end
+end
+
+%%
+
+
+% Define parameters
+ppm_axis = linspace(cppm - ppm/2, cppm + ppm/2, size(rc123,1)); % Frequency axis in ppm
+peak_ppm = [148, 166, 184, 197]; % Peaks of interest
+num_frames = 15; % Number of time frames
+
+% Find nearest indices for each peak
+[~, peak_idx] = min(abs(ppm_axis' - peak_ppm), [], 1);
+
+% Normalize igray (proton anatomical image)
+igray = double(igray);
+igray = (igray - min(igray(:))) / (max(igray(:)) - min(igray(:))); % Normalize
+
+% Preallocate an image array for montage
+montage_images = zeros(size(igray,1), size(igray,2), 3, num_frames * length(peak_ppm));
+
+% Create overlay images for each time frame and ppm peak
+frame_idx = 1;
+for p = 1:length(peak_ppm)
+    for t = 1:num_frames
+        % Extract 8x8 CSI data at each peak
+        heatmap_data = abs(squeeze(rc123(peak_idx(p), :, :, t))); 
+        
+        % Resize CSI data to match igray dimensions
+        csi_resized = imresize(heatmap_data, [size(igray,1), size(igray,2)], 'bicubic');
+        
+        % Apply colormap to CSI image
+        csi_mapped = ind2rgb(gray2ind(csi_resized, 256), jet);
+        
+        % Overlay CSI onto igray image
+        %alpha = 0.5; % Transparency factor
+        %overlay_img = (1-alpha) * repmat(igray, [1, 1, 3]) + alpha * csi_resized;
+        backgr = repmat(igray, [1, 1, 3]);
+        alpha (backgr,1)
+        csi_resized
+        
+        % Store the overlay image for montage
+        montage_images(:,:,:,frame_idx) = overlay_img;
+        frame_idx = frame_idx + 1;
+    end
+end
+
+% Display montage (4 rows for peaks, 20 columns for time frames)
+figure;
+montage(montage_images, 'Size', [length(peak_ppm), num_frames]);
+title('Dynamic CSI Heatmaps (4 Peaks × 15 Time Frames)');
